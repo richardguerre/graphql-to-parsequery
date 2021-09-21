@@ -1,3 +1,5 @@
+graphql-to-parsequery / [Modules](modules.md)
+
 # graphql-to-parsequery
 
 Utility functions that convert GraphQL statements (e.g. `where`) into Parse.
@@ -19,40 +21,6 @@ Or tree shakeable imports:
 ```js
 import { functionName } from 'graphql-to-parsequery';
 ```
-
-### tranformGraphQLWhereToParse
-
-This function transforms a GraphQL where statement into a Parse query input constraint. Example:
-
-```js
-let where = {
-  author: {
-    have: {
-      username: {
-        equalTo: 'johndoe@gmail.com',
-      },
-    },
-  },
-};
-transformGraphQLWhereToParse(where, 'BlogPost', parseClasses);
-console.log(where);
-/* output:
-    {
-      author: {
-        $inQuery: {
-          where: {
-            username: {
-              $eq: 'johndoe@gmail.com',
-            },
-          },
-          className: '_User',
-        },
-      },
-    }
-  */
-```
-
-You can find out more about this function and all other functions [here](https://github.com/richardguerre/graphql-to-parsequery/blob/master/docs/modules.md).
 
 # Want to contribute?
 

@@ -20,19 +20,18 @@ describe('transformQueryInputToParse', () => {
       owner2: {
         have: {
           username: {
-            equalTo: 'richardmguerre@gmail.com',
+            equalTo: 'johndoe@gmail.com',
           },
         },
       },
     };
     transformGraphQLWhereToParse(where, 'Project', parseClasses);
-    console.log(JSON.stringify(where));
     expect(where).toEqual({
       owner2: {
         $inQuery: {
           where: {
             username: {
-              $eq: 'richardmguerre@gmail.com',
+              $eq: 'johndoe@gmail.com',
             },
           },
           className: '_User',

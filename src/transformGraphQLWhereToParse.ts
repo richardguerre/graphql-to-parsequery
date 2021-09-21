@@ -44,9 +44,26 @@ const parseConstraintMap: { [key: string]: string } = {
   point: '$point',
 };
 
-export type Constraints = { [key: string]: any };
+/**
+ * This is the type definition of the GraphQL where.
+ * It is recommended that you import your own typedefinitions from your GraphQL code generators (e.g. graphql-codegen or relay).
+ *
+ * Example:
+ * ```js
+ * const where: GraphQLWhere = {
+ *   name: {
+ *     equalTo: "John Doe"
+ *   }
+ * }
+ * ```
+ */
+export type GraphQLWhere = { [key: string]: any };
 
-export type ParseClasses = {
+/**
+ * This is the type definition of a Parse class defintion.
+ * You can get all Parse classes by calling `Parse.Schema.all()`
+ */
+export type ParseClass = {
   className: string;
   fields: {
     [fieldName: string]: {
@@ -68,32 +85,46 @@ export type ParseClasses = {
   indexes?: {
     [key: string]: { [key: string]: any };
   };
-}[];
+};
 
+/**
+ * This is the type definition of the Parse classes, which is an array of the `ParseClass` type.
+ */
+export type ParseClasses = ParseClass[];
+
+/**
+ * Traversal function that takes in GraphQLWhere statement and converts into a Parse query input constraint. Recommended to use `tranformGraphQLWhereToParse` instead.
+ *
+ * @param graphQLWhere (object) GraphQL where input for the specified parseClassName. See type definition of `GraphQLWhere` for more information.
+ * @param parentFieldName (string)
+ * @param parseClassName (string) the Parse className (i.e. tablename) on which the where is being done.
+ * @param parentGraphQLWhere (object) parent GraphQL where. Similar to @param graphQLWhere, see type definition of `GraphQLWhere` for more information.
+ * @param parseClasses (array) Array of parse classes, which you can get by calling `Parse.schema.all()`. See type definition of `GraphQLWhere` for more information.
+ */
 export const transformQueryConstraintInputToParse = (
-  constraints: Constraints,
+  graphQLWhere: GraphQLWhere,
   parentFieldName: string,
-  className: string,
-  parentConstraints: Constraints,
+  parseClassName: string,
+  parentGraphQLWhere: GraphQLWhere,
   parseClasses: ParseClasses
 ) => {
   const fields = parseClasses.find(
-    parseClass => parseClass.className === className
+    parseClass => parseClass.className === parseClassName
   )?.fields;
-  if (parentFieldName === 'id' && className) {
-    Object.keys(constraints).forEach(constraintName => {
-      const constraintValue = constraints[constraintName];
+  if (parentFieldName === 'id' && parseClassName) {
+    Object.keys(graphQLWhere).forEach(constraintName => {
+      const constraintValue = graphQLWhere[constraintName];
       if (typeof constraintValue === 'string') {
         const globalIdObject = fromGlobalId(constraintValue);
 
-        if (globalIdObject.type === className) {
-          constraints[constraintName] = globalIdObject.id;
+        if (globalIdObject.type === parseClassName) {
+          graphQLWhere[constraintName] = globalIdObject.id;
         }
       } else if (Array.isArray(constraintValue)) {
-        constraints[constraintName] = constraintValue.map(value => {
+        graphQLWhere[constraintName] = constraintValue.map(value => {
           const globalIdObject = fromGlobalId(value);
 
-          if (globalIdObject.type === className) {
+          if (globalIdObject.type === parseClassName) {
             return globalIdObject.id;
           }
 
@@ -101,14 +132,14 @@ export const transformQueryConstraintInputToParse = (
         });
       }
     });
-    parentConstraints.objectId = constraints;
-    delete parentConstraints.id;
+    parentGraphQLWhere.objectId = graphQLWhere;
+    delete parentGraphQLWhere.id;
   }
-  Object.keys(constraints).forEach(fieldName => {
-    let fieldValue = constraints[fieldName];
+  Object.keys(graphQLWhere).forEach(fieldName => {
+    let fieldValue = graphQLWhere[fieldName];
     if (parseConstraintMap[fieldName]) {
-      constraints[parseConstraintMap[fieldName]] = constraints[fieldName];
-      delete constraints[fieldName];
+      graphQLWhere[parseConstraintMap[fieldName]] = graphQLWhere[fieldName];
+      delete graphQLWhere[fieldName];
     }
     /**
      * If we have a key-value pair, we need to change the way the constraint is structured.
@@ -139,12 +170,12 @@ export const transformQueryConstraintInputToParse = (
     if (
       fieldValue.key &&
       fieldValue.value &&
-      parentConstraints &&
+      parentGraphQLWhere &&
       parentFieldName
     ) {
-      delete parentConstraints[parentFieldName];
-      parentConstraints[`${parentFieldName}.${fieldValue.key}`] = {
-        ...parentConstraints[`${parentFieldName}.${fieldValue.key}`],
+      delete parentGraphQLWhere[parentFieldName];
+      parentGraphQLWhere[`${parentFieldName}.${fieldValue.key}`] = {
+        ...parentGraphQLWhere[`${parentFieldName}.${fieldValue.key}`],
         [parseConstraintMap[fieldName]]: fieldValue.value,
       };
     } else if (
@@ -156,59 +187,59 @@ export const transformQueryConstraintInputToParse = (
       if (fieldName === 'exists') {
         if (fields[parentFieldName].type === 'Relation') {
           const whereTarget = fieldValue ? 'where' : 'notWhere';
-          if (constraints[whereTarget]) {
-            if (constraints[whereTarget].objectId) {
-              constraints[whereTarget].objectId = {
-                ...constraints[whereTarget].objectId,
+          if (graphQLWhere[whereTarget]) {
+            if (graphQLWhere[whereTarget].objectId) {
+              graphQLWhere[whereTarget].objectId = {
+                ...graphQLWhere[whereTarget].objectId,
                 $exists: fieldValue,
               };
             } else {
-              constraints[whereTarget].objectId = {
+              graphQLWhere[whereTarget].objectId = {
                 $exists: fieldValue,
               };
             }
           } else {
             const parseWhereTarget = fieldValue ? '$inQuery' : '$notInQuery';
-            parentConstraints[parentFieldName][parseWhereTarget] = {
+            parentGraphQLWhere[parentFieldName][parseWhereTarget] = {
               where: { objectId: { $exists: true } },
               className: targetClass,
             };
           }
-          delete constraints.$exists;
+          delete graphQLWhere.$exists;
         } else {
-          parentConstraints[parentFieldName].$exists = fieldValue;
+          parentGraphQLWhere[parentFieldName].$exists = fieldValue;
         }
         return;
       }
       switch (fieldName) {
         case 'have':
-          parentConstraints[parentFieldName].$inQuery = {
+          parentGraphQLWhere[parentFieldName].$inQuery = {
             where: fieldValue,
             className: targetClass,
           };
           if (targetClass) {
             transformGraphQLWhereToParse(
-              parentConstraints[parentFieldName].$inQuery.where,
+              parentGraphQLWhere[parentFieldName].$inQuery.where,
               targetClass,
               parseClasses
             );
           }
           break;
         case 'haveNot':
-          parentConstraints[parentFieldName].$notInQuery = {
+          parentGraphQLWhere[parentFieldName].$notInQuery = {
             where: fieldValue,
             className: targetClass,
           };
           if (targetClass) {
             transformGraphQLWhereToParse(
-              parentConstraints[parentFieldName].$notInQuery.where,
+              parentGraphQLWhere[parentFieldName].$notInQuery.where,
               targetClass,
               parseClasses
             );
           }
           break;
       }
-      delete constraints[fieldName];
+      delete graphQLWhere[fieldName];
       return;
     }
     switch (fieldName) {
@@ -238,7 +269,7 @@ export const transformQueryConstraintInputToParse = (
               ...fieldValue.upperRight,
             },
           ];
-          constraints[parseConstraintMap[fieldName]] = fieldValue;
+          graphQLWhere[parseConstraintMap[fieldName]] = fieldValue;
         }
         break;
       case 'polygon':
@@ -263,19 +294,19 @@ export const transformQueryConstraintInputToParse = (
             },
             fieldValue.distance,
           ];
-          constraints[parseConstraintMap[fieldName]] = fieldValue;
+          graphQLWhere[parseConstraintMap[fieldName]] = fieldValue;
         }
         break;
     }
     if (typeof fieldValue === 'object') {
       if (fieldName === 'where') {
-        transformGraphQLWhereToParse(fieldValue, className, parseClasses);
+        transformGraphQLWhereToParse(fieldValue, parseClassName, parseClasses);
       } else {
         transformQueryConstraintInputToParse(
           fieldValue,
           fieldName,
-          className,
-          constraints,
+          parseClassName,
+          graphQLWhere,
           parseClasses
         );
       }
@@ -283,33 +314,48 @@ export const transformQueryConstraintInputToParse = (
   });
 };
 
-// renamed from parse-server/src/GraphQL/... transformQueryInputToParse
+/**
+ * Function that takes in a GraphQLWhere statement and converts into a Parse query input constraint.
+ *
+ * This function also takes care of GraphQLWhere statements that start with a `AND`, `OR`, or `NOR`.
+ *
+ * Note: Renamed from parse-server/src/GraphQL/... transformQueryInputToParse
+ *
+ * @param graphQLWhere (object) GraphQL where input for the specified parseClassName. See type definition of `GraphQLWhere` for more information.
+ * @param parseClassName (string) the Parse className (i.e. tablename) on which the where is being done.
+ * @param parseClasses (array) Array of parse classes, which you can get by calling `Parse.schema.all()`. See type definition of `GraphQLWhere` for more information.
+ * @returns void
+ */
 export const transformGraphQLWhereToParse = (
-  constraints: { [key: string]: any },
-  className: string,
+  graphQLWhere: { [key: string]: any },
+  parseClassName: string,
   parseClasses: ParseClasses
 ) => {
-  if (!constraints || typeof constraints !== 'object') {
+  if (!graphQLWhere || typeof graphQLWhere !== 'object') {
     return;
   }
 
-  Object.keys(constraints).forEach(fieldName => {
-    const fieldValue = constraints[fieldName];
+  Object.keys(graphQLWhere).forEach(fieldName => {
+    const fieldValue = graphQLWhere[fieldName];
 
     if (parseQueryMap[fieldName]) {
-      delete constraints[fieldName];
+      delete graphQLWhere[fieldName];
       fieldName = parseQueryMap[fieldName];
-      constraints[fieldName] = fieldValue;
-      fieldValue.forEach((fieldValueItem: Constraints) => {
-        transformGraphQLWhereToParse(fieldValueItem, className, parseClasses);
+      graphQLWhere[fieldName] = fieldValue;
+      fieldValue.forEach((fieldValueItem: GraphQLWhere) => {
+        transformGraphQLWhereToParse(
+          fieldValueItem,
+          parseClassName,
+          parseClasses
+        );
       });
       return;
     } else {
       transformQueryConstraintInputToParse(
         fieldValue,
         fieldName,
-        className,
-        constraints,
+        parseClassName,
+        graphQLWhere,
         parseClasses
       );
     }
